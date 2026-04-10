@@ -51,18 +51,26 @@ if [[ "$@" =~ 'run ' ]]; then
 	# Flatpak should be ran, ensure we attach our own arguments
 
 	args=("$@")
-	# @@u @@ are supposed to represent that everything after these arguments are URIs supposed to be passed in to file forwarding
-	# but there are cases that these are specified but the app is not giving any paths. in these cases app will just refuse to start
-	# handle the case where these two args are given but app is not requesting anything
-	if [ "${args[-2]}" = "@@u" ] && [ "${args[-1]}" = "@@" ]; then
-		unset 'args[-1]'
-		unset 'args[-1]'
-		set -- "${args[@]}"
-	fi
 
-	if ! [[ "$(flatpak info $(echo $@ | rev | cut -d ' ' -f 1 | rev) | grep -E 'org.kde.Sdk' | cut -d '/' -f 3)" =~ 6.* ]]; then
-		# Ensure we use the hybris extension
-		export FLATPAK_GL_DRIVERS="hybris"
+	# Find the app ID: first non-flag argument after "run"
+	app_id=""
+	seen_run=0
+	for a in "${args[@]}"; do
+		if [[ $seen_run -eq 0 ]]; then
+			[[ "$a" == "run" ]] && seen_run=1
+			continue
+		fi
+		[[ "$a" == -* ]] && continue
+		app_id="$a"
+		break
+	done
+
+	if [[ -n "$app_id" ]]; then
+		sdk=$("$FLATPAK" info "$app_id" 2>/dev/null | awk -F': *' '/^Sdk:/ {print $2}')
+		if [[ "$sdk" != org.kde.Sdk/*/6.* ]]; then
+		    echo "Warning: App $app_id is not using a KDE SDK 6 runtime, GL drivers may not work properly"
+			export FLATPAK_GL_DRIVERS="hybris"
+		fi
 	fi
 
 	exec ${FLATPAK} \
